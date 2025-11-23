@@ -99,6 +99,11 @@ export async function runOverlay() {
         console.log('Overlay is already running.');
         return;
     }
+        // Define flags logic here
+    const overlayFlags: string[] = [];
+    if (process.platform === 'linux') {
+        overlayFlags.push('--enable-features=UseOzonePlatform', '--ozone-platform=wayland');
+    }
     // if (isDev) {
     //     const { spawn } = await import('child_process');
     //     console.log(path.join(getResourcesDir(), 'GSM_Overlay'))
@@ -112,7 +117,8 @@ export async function runOverlay() {
     const overlayPath = path.join(getOverlayPath(), getOverlayExecName());
     if (fs.existsSync(overlayPath)) {
         const { spawn } = await import('child_process');
-        overlayProcess = spawn(overlayPath, [], { detached: false, stdio: 'ignore' });
+        // Pass overlayFlags as the second argument
+        overlayProcess = spawn(overlayPath, overlayFlags, { detached: false, stdio: 'ignore' });        
         console.log('Overlay launched successfully.');
     } else {
         console.error('Overlay executable not found at:', overlayPath);
