@@ -1,9 +1,10 @@
 import sys
 import asyncio
+import os
 from queue import Queue
 
 from PyQt6.QtWidgets import QApplication, QInputDialog
-from PyQt6.QtCore import QObject, pyqtSignal
+from PyQt6.QtCore import QObject, pyqtSignal, QThread
 from PyQt6.QtGui import QIcon
 
 from GameSentenceMiner.ui.anki_confirmation_qt import show_anki_confirmation
@@ -11,7 +12,7 @@ from GameSentenceMiner.ui.screenshot_selector_qt import show_screenshot_selector
 from GameSentenceMiner.ui.furigana_filter_preview_qt import show_furigana_filter_preview
 from GameSentenceMiner.ocr.ss_picker_qt import show_screen_cropper
 from GameSentenceMiner.ui.config_gui_qt import ConfigWindow
-from GameSentenceMiner.util.configuration import get_pickaxe_png_path, gsm_state, logger
+from GameSentenceMiner.util.configuration import get_pickaxe_png_path, gsm_state, logger, is_dev
 
 _qt_app = None
 _config_window = None
@@ -46,14 +47,25 @@ class DialogManager(QObject):
 
     def _run_sync(self, func_creator):
         """Internal helper for blocking sync calls."""
+        
+        # CHECK IF WE ARE ALREADY ON MAIN THREAD
+        app = QApplication.instance()
+        if app and app.thread() == QThread.currentThread():
+            # We are on the GUI thread, execute directly!
+            result_container = {}
+            def capture_result(res):
+                result_container['result'] = res
+            
+            func_creator(capture_result)
+            return result_container.get('result')
+
+        # We are on a background thread, proceed with Queue logic
         result_queue = Queue()
 
         def gui_logic():
-            # func_creator receives a callback that puts the result in the queue
             func_creator(lambda result: result_queue.put(result))
 
         self._execute_on_gui_thread.emit(gui_logic)
-        # Block worker thread until GUI thread finishes
         return result_queue.get()
 
     # 1. Screenshot Selector
@@ -221,6 +233,13 @@ def get_qt_app():
     """
     global _qt_app, _dialog_manager
     import qdarktheme
+
+    if is_dev:
+        # Enable debug logging for Qt's web engine, useful for web-based UI elements.
+        # This must be set BEFORE the QApplication is instantiated.
+        os.environ['QT_LOGGING_RULES'] = 'qt.webenginecontext.debug=true'
+        logger.info("Developer mode detected. Enabled Qt debug logging.")
+
     if _qt_app is None:
         _qt_app = QApplication.instance()
         if _qt_app is None:
